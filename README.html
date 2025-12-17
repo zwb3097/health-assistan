@@ -55,7 +55,7 @@
 
     <!-- 主要内容区 -->
     <main class="flex-1 container mx-auto px-4 py-6">
-        <!-- 图片诊断区域（恢复） -->
+        <!-- 图片诊断区域 -->
         <div class="bg-white rounded-xl shadow-sm p-5 mb-6">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-lg font-semibold flex items-center">
@@ -124,7 +124,7 @@
                 </div>
             </div>
 
-            <!-- 分析进度条（隐藏） -->
+            <!-- 分析进度条 -->
             <div id="analysisProgress" class="mt-4 hidden">
                 <p class="text-sm text-gray-600 mb-1 flex items-center">
                     <i class="fa fa-spinner fa-spin mr-1"></i>正在分析图片症状...
@@ -179,6 +179,11 @@
                         <i class="fa fa-paper-plane"></i>
                     </button>
                 </div>
+                <!-- 反馈按钮 -->
+                <div class="mt-2 flex space-x-3">
+                  <button onclick="feedback('good')" class="text-xs bg-green-100 text-green-700 px-3 py-1 rounded">回答准确</button>
+                  <button onclick="feedback('bad')" class="text-xs bg-red-100 text-red-600 px-3 py-1 rounded">回答不准</button>
+                </div>
             </div>
         </div>
     </main>
@@ -192,10 +197,14 @@
 
     <script>
         // 全局变量
-        let currentImageType = 'skin'; // 默认图片类型
-        let currentSymptom = null;     // 当前选中症状
+        let currentImageType = 'skin'; 
+        let currentSymptom = null;     
+        let lastChatRecord = { 
+            question: '',
+            answer: ''
+        };
 
-        // 核心：基础病因库（症状少也能给出病因）
+        // 基础病因库
         const basicDiseaseDB = {
             头痛: [
                 { name: "紧张性头痛", common: "最常见，与压力、疲劳、姿势不良相关", advice: "休息、按摩颈部、避免长时间低头" },
@@ -243,13 +252,13 @@
             ]
         };
 
-        // 症状关键词映射（适配不标准描述）
+        // 症状别名映射
         const symptomAlias = {
             "头疼": "头痛", "发烧": "发热", "胃不舒服": "胃痛", "肚子疼": "胃痛",
             "咳嗽了": "咳嗽", "拉肚子": "腹泻", "身上痒": "皮疹", "没力气": "乏力", "头有点晕": "头晕"
         };
 
-        // 图片视觉症状-病因关联库
+        // 图片症状病因库
         const imageDiseaseDB = {
             skin: [
                 { name: "接触性皮炎", common: "皮肤发红、瘙痒，边界较清晰", advice: "避免接触过敏原，外用糖皮质激素软膏" },
@@ -272,7 +281,7 @@
             ]
         };
 
-        // DOM元素
+        // DOM元素获取
         const chatContainer = document.getElementById('chatContainer');
         const userInput = document.getElementById('userInput');
         const sendButton = document.getElementById('sendButton');
@@ -289,16 +298,32 @@
         const imageTypeLabel = document.getElementById('imageTypeLabel');
         const symptomDesc = document.getElementById('symptomDesc');
 
+        // 反馈功能
+        function feedback(type) {
+            if (!lastChatRecord.question) {
+                alert('暂无聊天记录可反馈～');
+                return;
+            }
+            let feedbackList = JSON.parse(localStorage.getItem('health_feedback')) || [];
+            feedbackList.push({
+                question: lastChatRecord.question,
+                answer: lastChatRecord.answer,
+                feedback: type,
+                time: new Date().toLocaleString()
+            });
+            localStorage.setItem('health_feedback', JSON.stringify(feedbackList));
+            alert(type === 'good' ? '感谢你的反馈！我们会继续保持～' : '抱歉没帮到你，我们会尽快优化回答～');
+        }
+
         // 症状按钮点击事件
         symptomBtns.forEach(btn => {
             btn.addEventListener('click', function() {
-                // 按钮样式切换
-                symptomBtns.forEach(b => b.classList.remove('bg-primary', 'text-white'));
-                symptomBtns.forEach(b => b.classList.add('bg-gray-100', 'text-gray-700'));
+                symptomBtns.forEach(b => {
+                    b.classList.remove('bg-primary', 'text-white');
+                    b.classList.add('bg-gray-100', 'text-gray-700');
+                });
                 this.classList.add('bg-primary', 'text-white');
                 this.classList.remove('bg-gray-100', 'text-gray-700');
-                
-                // 填充输入框
                 currentSymptom = this.dataset.symptom;
                 userInput.value = currentSymptom;
                 userInput.focus();
@@ -315,7 +340,6 @@
                 btn.classList.add('active', 'border-primary', 'bg-primary/5');
                 btn.classList.remove('border-gray-200');
                 currentImageType = btn.dataset.type;
-                // 更新图片类型标签
                 const typeMap = {
                     skin: '皮肤症状',
                     tongue: '舌苔状态',
@@ -326,7 +350,7 @@
             });
         });
 
-        // 图片上传相关事件
+        // 图片上传事件
         imageUploadArea.addEventListener('click', () => imageInput.click());
         imageUploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -356,14 +380,14 @@
                 addSystemMessage('图片大小不能超过5MB', 'error');
                 return;
             }
-
             const reader = new FileReader();
             reader.onload = (event) => {
                 previewImage.src = event.target.result;
                 imagePreviewContainer.classList.remove('hidden');
-                // 重置选中的症状（图片分析优先）
-                symptomBtns.forEach(b => b.classList.remove('bg-primary', 'text-white'));
-                symptomBtns.forEach(b => b.classList.add('bg-gray-100', 'text-gray-700'));
+                symptomBtns.forEach(b => {
+                    b.classList.remove('bg-primary', 'text-white');
+                    b.classList.add('bg-gray-100', 'text-gray-700');
+                });
                 currentSymptom = null;
             };
             reader.readAsDataURL(file);
@@ -377,13 +401,11 @@
             symptomDesc.value = '';
         });
 
-        // 图片分析按钮事件
+        // 图片分析
         diagnoseImage.addEventListener('click', () => {
             imagePreviewContainer.classList.add('hidden');
             analysisProgress.classList.remove('hidden');
             progressBar.style.width = '0%';
-
-            // 模拟分析进度
             let progress = 0;
             const interval = setInterval(() => {
                 progress += Math.random() * 10;
@@ -400,18 +422,15 @@
         function generateImageDiagnosis() {
             analysisProgress.classList.add('hidden');
             progressBar.style.width = '0%';
-
             const desc = symptomDesc.value.trim() || '未提供额外描述';
             const diseases = imageDiseaseDB[currentImageType];
-            
             let reply = `
                 <div class="mb-3">
                     <h3 class="text-sm font-medium text-gray-800 mb-2">${imageTypeLabel.textContent}分析结果</h3>
-                    <p class="text-sm text-gray-700">基于图片及描述（${desc}），可能的原因及建议：</p>
+                    <p class="text-sm text-gray-700">基于图片及描述（${desc}），结合常见情况分析：</p>
                 </div>
                 <div class="space-y-2 mb-3">
             `;
-
             diseases.forEach((disease, index) => {
                 reply += `
                     <div class="bg-gray-50 p-2.5 rounded-lg text-sm">
@@ -423,16 +442,15 @@
                     </div>
                 `;
             });
-
             reply += `
                 </div>
                 <div class="p-2 bg-blue-50 rounded-lg text-xs text-blue-700">
-                    注：图片分析仅为初步推测，若症状持续或加重，建议到对应科室（皮肤科/消化科等）就诊确诊。
+                    注：分析仅为大一学生易懂的日常参考，不能替代医生诊断。若症状持续/加重，务必去校医院/正规医院就诊！
                 </div>
             `;
-
+            lastChatRecord.question = `上传${imageTypeLabel.textContent}，描述：${desc}`;
+            lastChatRecord.answer = reply;
             addMessageToChat(reply, 'ai');
-            // 重置图片预览
             imagePreviewContainer.classList.add('hidden');
             previewImage.src = '';
             symptomDesc.value = '';
@@ -442,12 +460,11 @@
         function sendMessage() {
             let message = userInput.value.trim();
             if (!message) return;
-
-            // 添加用户消息
+            lastChatRecord.question = message;
             addMessageToChat(message, 'user');
             userInput.value = '';
 
-            // 标准化症状关键词
+            // 标准化症状
             let mainSymptom = message;
             Object.keys(symptomAlias).forEach(alias => {
                 if (message.includes(alias)) mainSymptom = symptomAlias[alias];
@@ -466,11 +483,12 @@
                 const diseases = basicDiseaseDB[mainSymptom];
                 reply = `
                     <div class="mb-2">
-                        <p class="text-sm font-medium">可能的原因及建议：</p>
+                        <p class="text-sm font-medium">针对「${mainSymptom}」的分析（大一学生易懂版）：</p>
                     </div>
                     <div class="space-y-2">
                 `;
-                diseases.forEach((disease, index) => {
+                const topDiseases = diseases.slice(0, 2);
+                topDiseases.forEach((disease, index) => {
                     reply += `
                         <div class="bg-gray-50 p-2.5 rounded-lg text-sm">
                             <div class="flex items-center mb-1">
@@ -481,38 +499,39 @@
                         </div>
                     `;
                 });
-                reply += `</div>`;
+                reply += `
+                    </div>
+                    <div class="mt-2 p-2 bg-blue-50 rounded-lg text-xs text-blue-700">
+                        注：仅为日常参考，不适请及时去校医院/正规医院！
+                    </div>
+                `;
             } else {
-                // 兜底通用回复
                 reply = `
                     <div class="bg-gray-50 p-3 rounded-lg text-sm">
-                        <p class="mb-2">根据常见情况，可能的原因包括：</p>
+                        <p class="mb-2">根据你描述的症状，常见原因（大一学生易懂版）：</p>
                         <ul class="list-disc pl-5 space-y-1 text-gray-700">
-                            <li>生理因素：过度疲劳、睡眠不足、压力过大</li>
-                            <li>饮食因素：进食不规律、食物刺激或过敏</li>
+                            <li>生理因素：过度疲劳、睡眠不足、压力过大（最常见）</li>
+                            <li>饮食因素：进食不规律、食物刺激或轻微过敏</li>
                             <li>环境因素：温度变化、空气污染、接触过敏原</li>
-                            <li>潜在疾病：如持续不缓解，建议观察是否伴随其他症状（如发热、疼痛）</li>
                         </ul>
+                        <p class="mt-2 text-xs text-blue-700">提示：若持续不缓解，建议观察是否伴发热/疼痛，及时就医～</p>
                     </div>
                 `;
             }
-
-            // 模拟延迟回复
+            lastChatRecord.answer = reply;
             setTimeout(() => addMessageToChat(reply, 'ai'), 1000);
         }
 
-        // 添加系统消息（错误/提示）
+        // 系统消息
         function addSystemMessage(text, type = 'info') {
             const messageDiv = document.createElement('div');
             const bgColor = type === 'error' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600';
-            
             messageDiv.className = `flex justify-center my-2`;
             messageDiv.innerHTML = `
                 <div class="${bgColor} px-3 py-1.5 rounded-full text-xs flex items-center">
                     <i class="fa fa-${type === 'error' ? 'exclamation-circle' : 'info-circle'} mr-1"></i>${text}
                 </div>
             `;
-            
             chatContainer.appendChild(messageDiv);
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
@@ -521,7 +540,6 @@
         function addMessageToChat(content, sender) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `flex items-start ${sender === 'user' ? 'justify-end' : ''}`;
-
             const bubbleClass = sender === 'user' 
                 ? 'bg-primary text-white rounded-2xl rounded-tr-none' 
                 : 'bg-gray-50 rounded-2xl rounded-tl-none';
@@ -547,7 +565,6 @@
                         </div>
                     </div>
                 `;
-
             chatContainer.appendChild(messageDiv);
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
@@ -555,26 +572,19 @@
         // 事件绑定
         sendButton.addEventListener('click', sendMessage);
         userInput.addEventListener('keypress', (e) => e.key === 'Enter' && sendMessage());
-
-        // 帮助按钮
         document.getElementById('helpBtn').addEventListener('click', () => {
             addSystemMessage('可直接描述症状（如"头痛"），或上传图片分析皮肤/舌苔等视觉症状，无需详细描述也能获取可能原因~', 'info');
         });
-
-        // 主题切换
         document.getElementById('themeToggle').addEventListener('click', (e) => {
             const icon = e.currentTarget.querySelector('i');
             const isDark = icon.classList.contains('fa-sun-o');
-            
             if (isDark) {
-                // 浅色模式
                 icon.classList.replace('fa-sun-o', 'fa-moon-o');
                 document.body.classList.remove('bg-gray-900', 'text-white');
                 document.querySelectorAll('.bg-white').forEach(el => el.classList.remove('bg-gray-800'));
                 document.querySelectorAll('.bg-gray-50').forEach(el => el.classList.remove('bg-gray-800'));
                 document.querySelectorAll('.text-gray-800').forEach(el => el.classList.remove('text-gray-200'));
             } else {
-                // 深色模式
                 icon.classList.replace('fa-moon-o', 'fa-sun-o');
                 document.body.classList.add('bg-gray-900', 'text-white');
                 document.querySelectorAll('.bg-white').forEach(el => el.classList.add('bg-gray-800'));
